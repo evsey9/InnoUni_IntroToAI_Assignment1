@@ -535,6 +535,65 @@ class FileLinesReader {
 }
 
 /**
+ * Container class for the algorithm output, which is the algorithm runtime and the path from start to finish
+ */
+class AlgorithmOutput {
+    double millisecondRuntime;
+    List<Point> path;
+    AlgorithmOutput(double millisecondRuntime, List<Point> path) {
+        this.millisecondRuntime = millisecondRuntime;
+        this.path = path;
+    }
+    AlgorithmOutput() {};
+}
+
+/**
+ * Base class for pathfinding algorithms
+ */
+abstract class Algorithm {
+    Map map;
+    public int perceptionType;
+    long timeStart;
+    Algorithm(Map map, int perceptionType) {
+        this.map = map;
+        this.perceptionType = perceptionType;
+    }
+
+    /**
+     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest and the running time of the algorithm
+     * @return Algorithm Output with timing and path
+     */
+    public AlgorithmOutput getPath() {
+        AlgorithmOutput output = new AlgorithmOutput();
+        timeStart = System.nanoTime();
+        output.path = getPathBody();
+        output.millisecondRuntime = (double)(System.nanoTime() - timeStart) / 1000000;
+        return output;
+    }
+
+    /**
+     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest
+     * @return List of points that are part of the path
+     */
+    abstract protected List<Point> getPathBody();
+}
+
+class AStarAlgorithm extends Algorithm {
+    AStarAlgorithm(Map map, int perceptionType) {
+        super(map, perceptionType);
+    }
+
+    /**
+     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest using A*
+     * @return List of points that are part of the path
+     */
+    @Override
+    protected List<Point> getPathBody() {
+        return null;
+    }
+}
+
+/**
  * Main class
  */
 public class EvseyAntonovich {
