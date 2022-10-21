@@ -1,16 +1,61 @@
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.*;
 
 /**
- * Basic record for a pair of values
- * @param first First value
- * @param second Second value
- * @param <T> First value type
- * @param <V> Second value type
+ * Basic class for a pair of values
  */
-record Pair<T, V>(T first, V second) {
+class Pair<T, V> {
+    public T first;
+    public V second;
+    Pair(T first, V second) {
+        this.first = first;
+        this.second = second;
+    }
+}
 
+
+class Point {
+    int x;
+    int y;
+    Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+    Point() {
+        this(0, 0);
+    }
+
+    public boolean equals(Point other) {
+        return x == other.x && y == other.y;
+    }
+
+    Point sum(Point other) {
+        return new Point(x + other.x, y + other.y);
+    }
+
+    Point mult(int coeff) {
+        return new Point(x * coeff, y * coeff);
+    }
+
+    Point diff(Point other) {
+        return sum(other.mult(-1));
+    }
+
+    Point div(int coeff) {
+        return new Point(x / coeff, y / coeff);
+    }
+
+    int diagonalDistance(Point other, int costNormal, int costDiagonal) {
+        int diffX = Math.abs(x - other.x);
+        int diffY = Math.abs(y - other.y);
+        return costNormal * (diffX + diffY) + (costDiagonal - 2 * costNormal) * Math.min(diffX, diffY);
+    }
+
+    @Override
+    public String toString() {
+        return "{" + x + "," + y + "}";
+    }
 }
 
 class TileOccupant {
@@ -70,9 +115,17 @@ class Map {
     static public int defaultSize = 9;
     public int mapSize;
     public List<List<MapTile>> tiles;
+    public List<List<Boolean>> dangerZone;
     public List<List<Boolean>> perceptionZone;
+    public List<List<Boolean>> krakenZone;
 
-    public Pair<Integer, Integer> rockLocation;
+    public Point captainLocation;
+    public Point davyLocation;
+    public Point krakenLocation;
+    public Point rockLocation;
+    public Point chestLocation;
+    public Point tortugaLocation;
+
     public Map(int newSize) {
         mapSize = newSize;
         generateEmptyMap();
@@ -87,12 +140,24 @@ class Map {
      */
     private void generateEmptyMap() {
         tiles = new ArrayList<>(mapSize);
+        perceptionZone = new ArrayList<>(mapSize);
+        krakenZone = new ArrayList<>(mapSize);
+        dangerZone = new ArrayList<>(mapSize);
         for (int i = 0; i < mapSize; i++) {
             ArrayList<MapTile> curList = new ArrayList<>(mapSize);
+            ArrayList<Boolean> pList = new ArrayList<>(mapSize);
+            ArrayList<Boolean> kList = new ArrayList<>(mapSize);
+            ArrayList<Boolean> dList = new ArrayList<>(mapSize);
             for (int j = 0; j < mapSize; j++) {
                 curList.add(new MapTile());
+                pList.add(false);
+                kList.add(false);
+                dList.add(false);
             }
             tiles.add(curList);
+            perceptionZone.add(pList);
+            krakenZone.add(kList);
+            dangerZone.add(dList);
         }
     }
 
@@ -102,24 +167,213 @@ class Map {
      * @param y Center of the pattern vertically
      * @param pattern Perception zone pattern
      */
-    public void applyPerceptionPattern(int x, int y, List<List<Boolean>> pattern) {
+    public void applyPerceptionPattern(int x, int y, List<List<Boolean>> pattern, boolean kraken) {
         int patternXSize = pattern.get(0).size();
         int patternYSize = pattern.size();
         int xMin = Math.max(x - patternXSize / 2, 0);
-        int xMax = Math.min(x + patternXSize / 2, mapSize - 1);
+        int xMax = Math.min(x + patternXSize / 2 + 1, mapSize - 1);
         int yMin = Math.max(y - patternYSize / 2, 0);
-        int yMax = Math.min(y + patternYSize / 2, mapSize - 1);
+        int yMax = Math.min(y + patternYSize / 2 + 1, mapSize - 1);
         for (int i = 0; i < yMax - yMin; i++) {
             for (int j = 0; j < xMax - xMin; j++) {
-                perceptionZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                if (!kraken) {
+                    dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                    perceptionZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                }
+                else {
+                    dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                    krakenZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                }
             }
         }
     }
 
+    public MapTile getTileAtCoord(int x, int y) {
+        return tiles.get(y).get(x);
+    }
+
+    public MapTile getTileAtCoord(Point coord) {
+        return getTileAtCoord(coord.x, coord.y);
+    }
+}
+
+class MapInput {
+    public int scenario;
+    public Point captainCoord;
+    public Point davyCoord;
+    public Point krakenCoord;
+    public Point rockCoord;
+    public Point chestCoord;
+    public Point tortugaCoord;
+    MapInput() {};
+    MapInput(int scenario, Point captainCoord, Point davyCoord, Point krakenCoord, Point rockCoord, Point chestCoord, Point tortugaCoord) {
+        this.scenario = scenario;
+        this.captainCoord = captainCoord;
+        this.davyCoord = davyCoord;
+        this.krakenCoord = krakenCoord;
+        this.rockCoord = rockCoord;
+        this.chestCoord = chestCoord;
+        this.tortugaCoord = tortugaCoord;
+    }
+}
+
+class MapFactory {
+    /**
+     * Generates a map from input, or a random map if input is null.
+     * @param input Map input. If null, generates random map.
+     * @return Valid map object if input is valid, random valid map object if input is null, null if input is invalid.
+     */
+    static public Map GenerateMap(MapInput input) {
+        Random rand = new Random();  // for random generation
+        boolean inputConstructed = input != null;
+        if (!inputConstructed) {
+            input = new MapInput();
+            input.captainCoord = new Point(0, 0);  // we always start in the top left corner
+        }
+        Map map = new Map();
+        map.getTileAtCoord(input.captainCoord).occupant = new Captain();
+        map.captainLocation = input.captainCoord;
+
+        while (!inputConstructed && (input.davyCoord == null || map.getTileAtCoord(input.davyCoord).occupant != null)) {
+            input.davyCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+        }
+        if (map.getTileAtCoord(input.davyCoord).occupant != null) {
+            return null;
+        }
+        DavyJones davy = new DavyJones();
+        map.getTileAtCoord(input.davyCoord).occupant = davy;
+        map.davyLocation = input.davyCoord;
+        map.applyPerceptionPattern(input.davyCoord.x, input.davyCoord.y, davy.getPerceptionZone(), false);
+
+        while (!inputConstructed && (input.krakenCoord == null || map.getTileAtCoord(input.krakenCoord).occupant != null)) {
+            input.krakenCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+        }
+        if (map.getTileAtCoord(input.krakenCoord).occupant != null) {
+            return null;
+        }
+        Kraken kraken = new Kraken();
+        map.getTileAtCoord(input.krakenCoord).occupant = kraken;
+        map.krakenLocation = input.krakenCoord;
+        map.applyPerceptionPattern(input.krakenCoord.x, input.krakenCoord.y, kraken.getPerceptionZone(), true);
+
+        while (!inputConstructed && (input.rockCoord == null || map.getTileAtCoord(input.rockCoord).occupant != null && map.getTileAtCoord(input.rockCoord).occupant != kraken)) {
+            input.rockCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+        }
+        if (map.getTileAtCoord(input.rockCoord).occupant != null && map.getTileAtCoord(input.rockCoord).occupant != kraken) {
+            return null;  // kraken and rock can coexist
+        }
+        map.rockLocation = input.rockCoord;
+        List<List<Boolean>> rockPattern = new ArrayList<>(1);
+        rockPattern.add(new ArrayList<>(1));
+        rockPattern.get(0).add(true);
+        map.applyPerceptionPattern(input.rockCoord.x, input.rockCoord.y, rockPattern, false);
+
+        while (!inputConstructed && (input.chestCoord == null || map.dangerZone.get(input.chestCoord.y).get(input.chestCoord.x) || map.getTileAtCoord(input.chestCoord).occupant != null)) {
+            input.chestCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+        }
+        if (map.dangerZone.get(input.chestCoord.y).get(input.chestCoord.x) || map.getTileAtCoord(input.chestCoord).occupant != null) {
+            return null;  // chest cannot be in danger zone
+        }
+        Chest chest = new Chest();
+        map.getTileAtCoord(input.chestCoord).occupant = chest;
+        map.chestLocation = input.chestCoord;
+
+        while (!inputConstructed && (input.tortugaCoord == null || map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null)) {
+            input.tortugaCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+        }
+        if (map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null) {
+            return null;  // tortuga cannot be in danger zone
+        }
+        Tortuga tortuga = new Tortuga();
+        map.getTileAtCoord(input.tortugaCoord).occupant = tortuga;
+        map.tortugaLocation = input.tortugaCoord;
+
+        return map;
+    }
+}
+
+class InputParser {
+    static private Point parseCoord(String input) {
+        Point outPoint = new Point();
+        if (input.length() != 5 || input.charAt(0) != '[' || input.charAt(2) != ',' || input.charAt(4) != ']' ||
+                !Character.isDigit(input.charAt(1)) || !Character.isDigit(input.charAt(3)) ||
+                input.charAt(1) == '9' || input.charAt(3) == '9') {
+            return null;
+        }
+        outPoint.x = Character.digit(input.charAt(1), 10);
+        outPoint.y = Character.digit(input.charAt(3), 10);
+        return outPoint;
+    }
+    static public MapInput parseLines(List<String> lines) {
+        if (lines == null) {
+            return null;
+        }
+        if (lines.size() < 2) {
+            return null;
+        }
+        int scenario;
+
+        if (lines.get(1).length() != 1 || lines.get(1).charAt(0) != '1' && lines.get(1).charAt(0) != '2') {
+            return null;
+        }
+        scenario = Character.digit(lines.get(1).charAt(0), 10);
+        String[] coordStrings = lines.get(0).split(" ");
+        if (coordStrings.length != 6) {
+            return null;
+        }
+        Point[] positions = new Point[6];
+        for (int i = 0; i < 6; i++) {
+            Point curPoint = parseCoord(coordStrings[i]);
+            if (curPoint == null) {
+                return null;
+            }
+            positions[i] = curPoint;
+        }
+        return new MapInput(scenario, positions[0], positions[1], positions[2], positions[3], positions[4], positions[5]);
+    }
+}
+
+class FileLinesReader {
+    String filename;
+    FileLinesReader(String filename) {
+        this.filename = filename;
+    }
+    FileLinesReader() {
+        this("input.txt");
+    }
+    public List<String> getLines() {
+        List<String> output = new ArrayList<>();
+        try {
+            Scanner scanner = new Scanner(new File(filename));
+            while (scanner.hasNextLine()) {
+                output.add(scanner.nextLine());
+            }
+            scanner.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
+        return output;
+    }
 }
 
 public class EvseyAntonovich {
     public static void main(String[] args) {
-        Map myMap = new Map();
+        int n;
+        Map myMap;
+        System.out.println("Enter 1 for input.txt input, enter 2 for random map generation");
+        Scanner myScanner = new Scanner(System.in);
+        n = myScanner.nextInt();
+        MapInput myInput;
+        if (n == 1) {
+            FileLinesReader reader = new FileLinesReader();
+            myInput = InputParser.parseLines(reader.getLines());
+            if (myInput == null) {
+                System.out.println("Invalid input! Please enter valid input.");
+            }
+        } else {
+            myInput = null;
+        }
+        myMap = MapFactory.GenerateMap(myInput);
     }
 }
