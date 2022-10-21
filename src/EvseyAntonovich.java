@@ -468,8 +468,8 @@ class InputParser {
                 input.charAt(1) == '9' || input.charAt(3) == '9') {
             return null;
         }
-        outPoint.x = Character.digit(input.charAt(1), 10);
-        outPoint.y = Character.digit(input.charAt(3), 10);
+        outPoint.y = Character.digit(input.charAt(1), 10);
+        outPoint.x = Character.digit(input.charAt(3), 10);
         return outPoint;
     }
 
@@ -572,6 +572,6 @@ public class EvseyAntonovich {
             System.out.println("Invalid map! Please restart program.");
             return;
         }
-        System.out.println(myMap.getStringVisualization(true, path));
+        System.out.println(myMap.getStringVisualization(true, null));
     }
 }
