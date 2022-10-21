@@ -170,19 +170,24 @@ class Map {
     public void applyPerceptionPattern(int x, int y, List<List<Boolean>> pattern, boolean kraken) {
         int patternXSize = pattern.get(0).size();
         int patternYSize = pattern.size();
-        int xMin = Math.max(x - patternXSize / 2, 0);
-        int xMax = Math.min(x + patternXSize / 2 + 1, mapSize - 1);
-        int yMin = Math.max(y - patternYSize / 2, 0);
-        int yMax = Math.min(y + patternYSize / 2 + 1, mapSize - 1);
+        int xMin = x - patternXSize / 2;
+        int xMax = x + patternXSize / 2 + 1;
+        int yMin = y - patternYSize / 2;
+        int yMax = y + patternYSize / 2 + 1;
         for (int i = 0; i < yMax - yMin; i++) {
+            if (yMin + i < 0 || yMin + i >= mapSize)
+                continue;
             for (int j = 0; j < xMax - xMin; j++) {
-                if (!kraken) {
-                    dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
-                    perceptionZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
-                }
-                else {
-                    dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
-                    krakenZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                if (xMin + j < 0 || xMin + j >= mapSize)
+                    continue;
+                if (pattern.get(i).get(j)) {
+                    if (!kraken) {
+                        dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                        perceptionZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                    } else {
+                        dangerZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                        krakenZone.get(yMin + i).set(xMin + j, pattern.get(i).get(j));
+                    }
                 }
             }
         }
@@ -194,6 +199,42 @@ class Map {
 
     public MapTile getTileAtCoord(Point coord) {
         return getTileAtCoord(coord.x, coord.y);
+    }
+
+    public String getStringVisualization(boolean overlayPerception) {
+        List<List<Character>> lines = new ArrayList<>(mapSize);
+        for (int i = 0; i < mapSize; i++) {
+            List<Character> curList = new ArrayList<Character>();
+            for (int j = 0; j < mapSize; j++) {
+                curList.add('.');
+            }
+            lines.add(curList);
+        }
+        if (overlayPerception) {
+            for (int i = 0; i < mapSize; i++) {
+                for (int j = 0; j < mapSize; j++) {
+                    if (dangerZone.get(i).get(j)) {
+                        lines.get(i).set(j, '!');
+                    }
+                }
+            }
+        }
+
+        lines.get(captainLocation.y).set(captainLocation.x, '@');
+        lines.get(davyLocation.y).set(davyLocation.x, 'D');
+        lines.get(rockLocation.y).set(rockLocation.x, 'R');
+        lines.get(krakenLocation.y).set(krakenLocation.x, 'K');
+        lines.get(chestLocation.y).set(chestLocation.x, '#');
+        lines.get(tortugaLocation.y).set(tortugaLocation.x, '$');
+
+        StringBuilder outStrBuilder = new StringBuilder();
+        for (int i = 0; i < mapSize; i++) {
+            for (int j = 0; j < mapSize; j++) {
+                outStrBuilder.append(lines.get(i).get(j));
+            }
+            outStrBuilder.append('\n');
+        }
+        return outStrBuilder.toString();
     }
 }
 
@@ -375,5 +416,6 @@ public class EvseyAntonovich {
             myInput = null;
         }
         myMap = MapFactory.GenerateMap(myInput);
+        System.out.println(myMap.getStringVisualization(true));
     }
 }
