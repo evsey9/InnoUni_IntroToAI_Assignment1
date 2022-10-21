@@ -52,6 +52,12 @@ class Point {
         return costNormal * (diffX + diffY) + (costDiagonal - 2 * costNormal) * Math.min(diffX, diffY);
     }
 
+    int manhattanDistance(Point other, int cost) {
+        int diffX = Math.abs(x - other.x);
+        int diffY = Math.abs(y - other.y);
+        return cost * (diffX + diffY);
+    }
+
     @Override
     public String toString() {
         return "{" + x + "," + y + "}";
