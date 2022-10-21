@@ -207,7 +207,7 @@ class Map {
         return getTileAtCoord(coord.x, coord.y);
     }
 
-    public String getStringVisualization(boolean overlayPerception) {
+    public String getStringVisualization(boolean overlayPerception, List<Point> path) {
         List<List<Character>> lines = new ArrayList<>(mapSize);
         for (int i = 0; i < mapSize; i++) {
             List<Character> curList = new ArrayList<Character>();
@@ -232,6 +232,28 @@ class Map {
         lines.get(krakenLocation.y).set(krakenLocation.x, 'K');
         lines.get(chestLocation.y).set(chestLocation.x, '#');
         lines.get(tortugaLocation.y).set(tortugaLocation.x, '$');
+
+        if (path != null) {
+            for (int i = 1; i < path.size() - 1; i++) {
+                Point curPoint = path.get(i);
+                Point prevPoint = path.get(i - 1);
+                Point nextPoint = path.get(i + 1);
+                int diffX = nextPoint.x - prevPoint.x;
+                int diffY = nextPoint.y - prevPoint.y;
+                if (diffX > 0 && diffY > 0 || diffX < 0 && diffY < 0) {
+                    lines.get(curPoint.y).set(curPoint.x, '\\');
+                }
+                if (diffX > 0 && diffY < 0 || diffX < 0 && diffY > 0) {
+                    lines.get(curPoint.y).set(curPoint.x, '/');
+                }
+                if (diffX == 0 && diffY != 0) {
+                    lines.get(curPoint.y).set(curPoint.x, '|');
+                }
+                if (diffY == 0 && diffX != 0) {
+                    lines.get(curPoint.y).set(curPoint.x, '-');
+                }
+            }
+        }
 
         StringBuilder outStrBuilder = new StringBuilder();
         for (int i = 0; i < mapSize; i++) {
@@ -412,16 +434,29 @@ public class EvseyAntonovich {
         Scanner myScanner = new Scanner(System.in);
         n = myScanner.nextInt();
         MapInput myInput;
+        List<Point> path = null;
         if (n == 1) {
             FileLinesReader reader = new FileLinesReader();
             myInput = InputParser.parseLines(reader.getLines());
             if (myInput == null) {
                 System.out.println("Invalid input! Please enter valid input.");
             }
+            path = new ArrayList<>();
+            path.add(new Point(0, 0));
+            path.add(new Point(0, 1));
+            path.add(new Point(0, 2));
+            path.add(new Point(1, 3));
+            path.add(new Point(2, 4));
+            path.add(new Point(3, 4));
+            path.add(new Point(4, 4));
+            path.add(new Point(5, 4));
+            path.add(new Point(6, 5));
+            path.add(new Point(7, 6));
+            path.add(new Point(8, 7));
         } else {
             myInput = null;
         }
         myMap = MapFactory.GenerateMap(myInput);
-        System.out.println(myMap.getStringVisualization(true));
+        System.out.println(myMap.getStringVisualization(true, path));
     }
 }
