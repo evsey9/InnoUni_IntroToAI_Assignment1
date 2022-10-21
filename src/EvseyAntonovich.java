@@ -14,7 +14,9 @@ class Pair<T, V> {
     }
 }
 
-
+/**
+ * Class for a coordinate in 2D space
+ */
 class Point {
     int x;
     int y;
@@ -26,32 +28,70 @@ class Point {
         this(0, 0);
     }
 
+    /**
+     * Check if coordinate is equal to another coordinate
+     * @param other Other coordinate to compare with
+     * @return True if both x and y are equal, false otherwise
+     */
     public boolean equals(Point other) {
         return x == other.x && y == other.y;
     }
 
+    /**
+     * Sum coordinates with another point
+     * @param other Other point
+     * @return New point with summed coordinates
+     */
     Point sum(Point other) {
         return new Point(x + other.x, y + other.y);
     }
 
+    /**
+     * Multiply point by an integer coefficient
+     * @param coeff Coefficient by how much to multiply the point
+     * @return New point with multiplied coordinates
+     */
     Point mult(int coeff) {
         return new Point(x * coeff, y * coeff);
     }
 
+    /**
+     * Take difference of this point and another point
+     * @param other The other point
+     * @return New point with difference coordinates
+     */
     Point diff(Point other) {
         return sum(other.mult(-1));
     }
 
+    /**
+     * Divide point by an integer coefficient
+     * @param coeff Integer number by how much to divide the point
+     * @return New point with divided coordinates
+     */
     Point div(int coeff) {
         return new Point(x / coeff, y / coeff);
     }
 
+    /**
+     * Get the diagonal distance cost to another point with specified diagonal and non-diagonal movement costs
+     * @param other The point to which compute the distance
+     * @param costNormal Cost of going non-diagonally
+     * @param costDiagonal Cost of going diagonally
+     * @return Total cost of movement
+     */
     int diagonalDistance(Point other, int costNormal, int costDiagonal) {
         int diffX = Math.abs(x - other.x);
         int diffY = Math.abs(y - other.y);
         return costNormal * (diffX + diffY) + (costDiagonal - 2 * costNormal) * Math.min(diffX, diffY);
     }
 
+    /**
+     * Get the manhattan (strictly non-diagonal) distance cost to another point with specified movement cost
+     * @param other The point to which compute the distance
+     * @param cost Cost of going non-diagonally
+     * @return Total cost of movement
+     */
     int manhattanDistance(Point other, int cost) {
         int diffX = Math.abs(x - other.x);
         int diffY = Math.abs(y - other.y);
@@ -64,14 +104,23 @@ class Point {
     }
 }
 
+/**
+ * Base class for objects which occupy a tile, except the Rock
+ */
 class TileOccupant {
 
 }
 
+/**
+ * Class for Jack Sparrow
+ */
 class Captain extends TileOccupant {
 
 }
 
+/**
+ * Interface for objects which have a perception zone, other than the Rock, as it is not actually a class
+ */
 interface Hazard {
     /**
      * Gets the perception zone pattern of the hazard, centered on itself.
@@ -80,6 +129,9 @@ interface Hazard {
     abstract List<List<Boolean>> getPerceptionZone();
 }
 
+/**
+ * Class for Davy Jones
+ */
 class DavyJones extends TileOccupant implements Hazard {
 
     @Override
@@ -92,6 +144,9 @@ class DavyJones extends TileOccupant implements Hazard {
     }
 }
 
+/**
+ * Class for Kraken
+ */
 class Kraken extends TileOccupant implements Hazard {
 
     @Override
@@ -105,18 +160,30 @@ class Kraken extends TileOccupant implements Hazard {
 
 }
 
+/**
+ * Class for the Dead Man's Chest
+ */
 class Chest extends TileOccupant {
 
 }
 
+/**
+ * Class for the Tortuga Island
+ */
 class Tortuga extends TileOccupant {
 
 }
 
+/**
+ * Container class which stores the occupant of a map tile
+ */
 class MapTile {
     public TileOccupant occupant = null;
 }
 
+/**
+ * The sea map itself
+ */
 class Map {
     static public int defaultSize = 9;
     public int mapSize;
@@ -142,7 +209,7 @@ class Map {
     }
 
     /**
-     * Fills the tiles 2D list with empty map tiles and generally initializes the map into a workable state.
+     * Initializes all the 2D lists and generally initializes the map into a workable state.
      */
     private void generateEmptyMap() {
         tiles = new ArrayList<>(mapSize);
@@ -172,6 +239,7 @@ class Map {
      * @param x Center of the pattern horizontally
      * @param y Center of the pattern vertically
      * @param pattern Perception zone pattern
+     * @param kraken Whether this pattern is the pattern of the kraken
      */
     public void applyPerceptionPattern(int x, int y, List<List<Boolean>> pattern, boolean kraken) {
         int patternXSize = pattern.get(0).size();
@@ -199,14 +267,31 @@ class Map {
         }
     }
 
+    /**
+     * Gets the map tile at specified coordinate
+     * @param x Horizontal coordinate
+     * @param y Vertical coordinate
+     * @return MapTile object
+     */
     public MapTile getTileAtCoord(int x, int y) {
         return tiles.get(y).get(x);
     }
 
+    /**
+     * Gets the map tile at specified coordinate
+     * @param coord The tile coordinate as a Point object
+     * @return MapTile object
+     */
     public MapTile getTileAtCoord(Point coord) {
         return getTileAtCoord(coord.x, coord.y);
     }
 
+    /**
+     * Gets the visualization of the map as a String
+     * @param overlayPerception Whether to overlay the perception zones on the map or not
+     * @param path The path to overlay on the map, null for no path overlay
+     * @return String representation, including linebreaks
+     */
     public String getStringVisualization(boolean overlayPerception, List<Point> path) {
         List<List<Character>> lines = new ArrayList<>(mapSize);
         for (int i = 0; i < mapSize; i++) {
@@ -266,6 +351,9 @@ class Map {
     }
 }
 
+/**
+ * Class to store the map input
+ */
 class MapInput {
     public int scenario;
     public Point captainCoord;
@@ -286,6 +374,9 @@ class MapInput {
     }
 }
 
+/**
+ * Factory class for the Map object
+ */
 class MapFactory {
     /**
      * Generates a map from input, or a random map if input is null.
@@ -295,7 +386,7 @@ class MapFactory {
     static public Map GenerateMap(MapInput input) {
         Random rand = new Random();  // for random generation
         boolean inputConstructed = input != null;
-        if (!inputConstructed) {
+        if (!inputConstructed) {  // if no map input given, we make our own
             input = new MapInput();
             input.captainCoord = new Point(0, 0);  // we always start in the top left corner
         }
@@ -304,7 +395,7 @@ class MapFactory {
         map.captainLocation = input.captainCoord;
 
         while (!inputConstructed && (input.davyCoord == null || map.getTileAtCoord(input.davyCoord).occupant != null)) {
-            input.davyCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+            input.davyCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         if (map.getTileAtCoord(input.davyCoord).occupant != null) {
             return null;
@@ -315,7 +406,7 @@ class MapFactory {
         map.applyPerceptionPattern(input.davyCoord.x, input.davyCoord.y, davy.getPerceptionZone(), false);
 
         while (!inputConstructed && (input.krakenCoord == null || map.getTileAtCoord(input.krakenCoord).occupant != null)) {
-            input.krakenCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+            input.krakenCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         if (map.getTileAtCoord(input.krakenCoord).occupant != null) {
             return null;
@@ -326,7 +417,7 @@ class MapFactory {
         map.applyPerceptionPattern(input.krakenCoord.x, input.krakenCoord.y, kraken.getPerceptionZone(), true);
 
         while (!inputConstructed && (input.rockCoord == null || map.getTileAtCoord(input.rockCoord).occupant != null && map.getTileAtCoord(input.rockCoord).occupant != kraken)) {
-            input.rockCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+            input.rockCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         if (map.getTileAtCoord(input.rockCoord).occupant != null && map.getTileAtCoord(input.rockCoord).occupant != kraken) {
             return null;  // kraken and rock can coexist
@@ -338,7 +429,7 @@ class MapFactory {
         map.applyPerceptionPattern(input.rockCoord.x, input.rockCoord.y, rockPattern, false);
 
         while (!inputConstructed && (input.chestCoord == null || map.dangerZone.get(input.chestCoord.y).get(input.chestCoord.x) || map.getTileAtCoord(input.chestCoord).occupant != null)) {
-            input.chestCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+            input.chestCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         if (map.dangerZone.get(input.chestCoord.y).get(input.chestCoord.x) || map.getTileAtCoord(input.chestCoord).occupant != null) {
             return null;  // chest cannot be in danger zone
@@ -348,7 +439,7 @@ class MapFactory {
         map.chestLocation = input.chestCoord;
 
         while (!inputConstructed && (input.tortugaCoord == null || map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null)) {
-            input.tortugaCoord = new Point(rand.nextInt(9), rand.nextInt(9));
+            input.tortugaCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         if (map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null) {
             return null;  // tortuga cannot be in danger zone
@@ -361,7 +452,15 @@ class MapFactory {
     }
 }
 
+/**
+ * Class which parses the map text input
+ */
 class InputParser {
+    /**
+     * Parses a single coordinate string of format [x,y]
+     * @param input Coordinate string
+     * @return Coordinate in string, null if coordinate string is invalid
+     */
     static private Point parseCoord(String input) {
         Point outPoint = new Point();
         if (input.length() != 5 || input.charAt(0) != '[' || input.charAt(2) != ',' || input.charAt(4) != ']' ||
@@ -373,6 +472,12 @@ class InputParser {
         outPoint.y = Character.digit(input.charAt(3), 10);
         return outPoint;
     }
+
+    /**
+     * Parses lines of input.txt, with first line having coordinates of all the objects and second line having the scenario number
+     * @param lines List of 2 or more Strings
+     * @return MapInput object
+     */
     static public MapInput parseLines(List<String> lines) {
         if (lines == null) {
             return null;
@@ -402,6 +507,9 @@ class InputParser {
     }
 }
 
+/**
+ * Class which reads lines into a list from a specified file
+ */
 class FileLinesReader {
     String filename;
     FileLinesReader(String filename) {
@@ -426,6 +534,9 @@ class FileLinesReader {
     }
 }
 
+/**
+ * Main class
+ */
 public class EvseyAntonovich {
     public static void main(String[] args) {
         int n;
@@ -457,6 +568,10 @@ public class EvseyAntonovich {
             myInput = null;
         }
         myMap = MapFactory.GenerateMap(myInput);
+        if (myMap == null) {
+            System.out.println("Invalid map! Please restart program.");
+            return;
+        }
         System.out.println(myMap.getStringVisualization(true, path));
     }
 }
