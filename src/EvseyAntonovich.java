@@ -1,6 +1,8 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.util.*;
 
 /**
@@ -24,6 +26,10 @@ class Point {
     Point(int x, int y) {
         this.x = x;
         this.y = y;
+    }
+    Point(Point other) {
+        this.x = other.x;
+        this.y = other.y;
     }
     Point() {
         this(0, 0);
@@ -102,6 +108,19 @@ class Point {
     @Override
     public String toString() {
         return "[" + y + "," + x + "]";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Point point = (Point) o;
+        return x == point.x && y == point.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(x, y);
     }
 }
 
@@ -446,7 +465,7 @@ class MapFactory {
         boolean inputConstructed = input != null;
         if (!inputConstructed) {  // if no map input given, we make our own
             input = new MapInput();
-            input.captainCoord = new Point(0, 0);  // we always start in the top left corner
+            input.captainCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
         Map map = new Map();
         map.getTileAtCoord(input.captainCoord).occupant = new Captain();
@@ -496,10 +515,10 @@ class MapFactory {
         map.getTileAtCoord(input.chestCoord).occupant = chest;
         map.chestLocation = input.chestCoord;
 
-        while (!inputConstructed && (input.tortugaCoord == null || map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null)) {
+        while (!inputConstructed && (input.tortugaCoord == null || map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant == chest)) {
             input.tortugaCoord = new Point(rand.nextInt(Map.defaultSize), rand.nextInt(Map.defaultSize));
         }
-        if (map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant != null) {
+        if (map.dangerZone.get(input.tortugaCoord.y).get(input.tortugaCoord.x) || map.getTileAtCoord(input.tortugaCoord).occupant == chest) {
             return null;  // tortuga cannot be in danger zone
         }
         Tortuga tortuga = new Tortuga();
@@ -601,11 +620,16 @@ class FileLinesReader {
  * Container class for the algorithm output, which is the algorithm runtime and the path from start to finish
  */
 class AlgorithmOutput {
+    Map map;
     double millisecondRuntime;
     PathResult path;
-    AlgorithmOutput(double millisecondRuntime, PathResult path) {
+    AlgorithmOutput(double millisecondRuntime, PathResult path, Map map) {
         this.millisecondRuntime = millisecondRuntime;
         this.path = path;
+        this.map = map;
+    }
+    AlgorithmOutput(double millisecondRuntime, PathResult path) {
+        this(millisecondRuntime, path, null);
     }
     AlgorithmOutput() {}
 }
@@ -652,6 +676,7 @@ abstract class Algorithm {
         timeStart = System.nanoTime();
         output.path = getPathBody();
         output.millisecondRuntime = (double)(System.nanoTime() - timeStart) / 1000000;
+        output.map = map;
         return output;
     }
 
@@ -706,7 +731,14 @@ class AStarAlgorithm extends Algorithm {
     boolean krakenDiscovered = false;
 
     /**
-     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest using A*
+     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest using A*.
+     * First, it gets the shortest path from Jack Sparrow to the chest, without making a detour to Tortuga Island.
+     * Then, it calculates a path to Tortuga Island, if the Kraken has been discovered during the first path.
+     * Afterwards, it calculates four paths - from Tortuga to each of the corners near the Kraken.
+     * Afterwards, for each of the valid paths generated to the corners, it generates another path - from that corner to the chest.
+     * Afterwards, it concatenates all the intermediate paths, if they are valid (not null), and gets the minimum path.
+     * If this minimum path is shorter than the standard non-Tortuga path, or if there is NO non-Tortuga path, it instead returns the Tortuga path.
+     * Otherwise, it returns the standard non-Tortuga path, or no path at all, if the goal is completely unreachable.
      * @return PathResult that contains the list of points that are part of the path
      */
     @Override
@@ -714,6 +746,9 @@ class AStarAlgorithm extends Algorithm {
         PathResult shortestPath = getPathBetweenPoints(map.captainLocation, map.chestLocation, 0, true);
         if (krakenDiscovered) {
             PathResult toTortuga = getPathBetweenPoints(map.captainLocation, map.tortugaLocation, 0, true);
+            if (toTortuga == null) {
+                return shortestPath;
+            }
             toTortuga.path.remove(toTortuga.path.size() - 1);
             List<Point> krakenPoints = Arrays.asList(
                     map.krakenLocation.sum(new Point(-1, -1)),
@@ -820,8 +855,7 @@ class AStarAlgorithm extends Algorithm {
             }
             closed.add(current);
             List<Point> pointNeighbors = map.getNeighbors(curLoc, krakenPresent);
-            for (int i = 0; i < pointNeighbors.size(); i++) {
-                Point pointNeighbor = pointNeighbors.get(i);
+            for (Point pointNeighbor : pointNeighbors) {
                 AStarTile neighborTile = tiles.get(pointNeighbor.y).get(pointNeighbor.x);
                 if (closed.contains(neighborTile)) {
                     continue;
@@ -833,6 +867,357 @@ class AStarAlgorithm extends Algorithm {
             }
         }
         return null;
+    }
+}
+
+/**
+ * A class to implement a visit tree structure, so that we don't have to copy the visited nodes each time
+ */
+class VisitTree {
+    VisitTree parent = null;
+    Point curElem = null;
+    VisitTree(Point elem) {
+        curElem = elem;
+    }
+
+    /**
+     * Adds an element to the tree
+     * @param elem Element to add
+     * @param parent Parent node
+     */
+    VisitTree(Point elem, VisitTree parent) {
+        curElem = elem;
+        this.parent = parent;
+    }
+
+    /**
+     * Check if element is in the tree
+     * @param elem The element to check for
+     * @return True if element is in tree, false otherwise
+     */
+    public boolean isInTree(Point elem) {
+        VisitTree curNode = this;
+        while (curNode != null) {
+            if (curNode.curElem.equals(elem)) {
+                return true;
+            }
+            curNode = curNode.parent;
+        }
+        return false;
+    }
+}
+
+/**
+ * Class for the Backtracking Algorithm
+ */
+class BacktrackingAlgorithm extends Algorithm {
+    /**
+     * Class which stores the current game state and possible next game states
+     */
+    class GameState {
+        Point curLoc = null;
+        Point goal = null;
+        VisitTree visitedBeforeTortuga;
+        VisitTree visitedAfterTortuga;
+        boolean tortugaVisited = false;
+        boolean krakenAlive = true;
+        boolean davyDiscovered = false;
+        boolean krakenDiscovered = false;
+        boolean rockDiscovered = false;
+        GameState parent = null;
+        PriorityQueue<GameState> nextPossibleStates = new PriorityQueue<>(8, new Comparator<GameState>() {
+            @Override
+            public int compare(GameState o1, GameState o2) {
+                // First compare diagonal distance to goal, then compare manhattan distance if diagonal distance is equal
+                if (o1.curLoc.diagonalDistance(o1.goal, 1, 1) < o2.curLoc.diagonalDistance(o2.goal, 1, 1)) {
+                    return -1;
+                } else if (o1.curLoc.diagonalDistance(o1.goal, 1, 1) == o2.curLoc.diagonalDistance(o2.goal, 1, 1)) {
+                    if (o1.curLoc.manhattanDistance(o1.goal, 1) < o2.curLoc.manhattanDistance(o2.goal, 1)) {
+                        return -1;
+                    } else if (o1.curLoc.manhattanDistance(o1.goal, 1) == o2.curLoc.manhattanDistance(o2.goal, 1)) {
+                        return 0;
+                    } else {
+                        return 1;
+                    }
+                } else {
+                    return 1;
+                }
+            }
+        });
+        int iteration = 1;
+
+        GameState(Point startLoc, Point goal) {
+            curLoc = new Point(startLoc);
+            this.goal = new Point(goal);
+            visitedBeforeTortuga = new VisitTree(startLoc);
+        }
+
+        /**
+         * Copies the previos game state but with new location
+         * @param previousState The previous state
+         * @param newLoc New location
+         */
+        GameState(GameState previousState, Point newLoc) {
+            curLoc = new Point(newLoc);
+            goal = previousState.goal;
+            visitedBeforeTortuga = previousState.visitedBeforeTortuga;
+            visitedAfterTortuga = previousState.visitedAfterTortuga;
+            tortugaVisited = previousState.tortugaVisited;
+            krakenAlive = previousState.krakenAlive;
+            davyDiscovered = previousState.davyDiscovered;
+            krakenDiscovered = previousState.krakenDiscovered;
+            rockDiscovered = previousState.rockDiscovered;
+            parent = previousState;
+            iteration = previousState.iteration + 1;
+        }
+    }
+    Set<Point> visitedTotal = new HashSet<>();
+    PathResult shortestPath = null;
+    List<List<Integer>> shortestIterationBeforeTortuga = new ArrayList<>();
+    List<List<Integer>> shortestIterationAfterTortuga = new ArrayList<>();
+    BacktrackingAlgorithm(Map map, int perceptionType) {
+        super(map, perceptionType);
+        for (int i = 0; i < map.mapSize; i++) {
+            List<Integer> list1 = new ArrayList<Integer>();
+            List<Integer> list2 = new ArrayList<Integer>();
+            for (int j = 0; j < map.mapSize; j++) {
+                list1.add(-1);
+                list2.add(-1);
+            }
+            shortestIterationBeforeTortuga.add(list1);
+            shortestIterationAfterTortuga.add(list2);
+        }
+    }
+
+    /**
+     * Gets the shortest path from Jack Sparrow to the Dead Man's Chest using backtracking with heuristics.
+     * @return PathResult that contains the list of points that are part of the path
+     */
+    @Override
+    protected PathResult getPathBody() {
+        GameState initialState = new GameState(map.captainLocation, map.tortugaLocation);
+        exploreFutureGameStates(initialState);
+        return shortestPath;
+    }
+
+    /**
+     * Explores many possible future game states to get the shortest path, and puts the path into shortestPath
+     * @param state Game state to explore future game states of
+     */
+    void exploreFutureGameStates(GameState state) {
+        if (state.curLoc.equals(map.chestLocation)) {
+            // We have discovered the exit
+            PathResult result = new PathResult();
+            result.start = map.captainLocation;
+            result.goal = map.chestLocation;
+            result.end = map.chestLocation;
+            List<Point> outputPath = new ArrayList<>();
+            GameState curState = state;
+            while (curState != null) {
+                outputPath.add(0, curState.curLoc);
+                curState = curState.parent;
+            }
+            result.path = outputPath;
+            if (shortestPath == null || result.path.size() < shortestPath.path.size()) {
+                shortestPath = result;
+            }
+            return;
+        }
+
+        if (shortestPath != null && state.iteration >= shortestPath.path.size()) {
+            return;  // Our iteration is already the length of the shortest path, and we have not found the exit yet, therefore, this is definitely not the shortest path
+        }
+        if (state.iteration > 25) {  // ENOUGH
+            return;
+        }
+
+        // We found Tortuga
+        if (state.curLoc.equals(map.tortugaLocation)) {
+            state.tortugaVisited = true;
+            state.visitedAfterTortuga = new VisitTree(state.curLoc);
+            state.goal = map.chestLocation;
+        }
+
+        // In this block, we make sure that we don't go to a cell which we know we can get to in a shorter way already
+        int curShortBeforeTortugaIter = shortestIterationBeforeTortuga.get(state.curLoc.y).get(state.curLoc.x);
+        int curShortAfterTortugaIter = shortestIterationAfterTortuga.get(state.curLoc.y).get(state.curLoc.x);
+        if (!state.tortugaVisited && curShortBeforeTortugaIter != -1 && state.iteration > curShortBeforeTortugaIter ||
+                state.tortugaVisited && curShortAfterTortugaIter != -1 && state.iteration > curShortAfterTortugaIter) {
+            return;
+        } else {
+            if (!state.tortugaVisited) {
+                shortestIterationBeforeTortuga.get(state.curLoc.y).set(state.curLoc.x, state.iteration);
+            } else {
+                shortestIterationAfterTortuga.get(state.curLoc.y).set(state.curLoc.x, state.iteration);
+            }
+        }
+
+        if (!state.tortugaVisited) {  // We separate the visited cells into two sets, because after visiting Tortuga we can move into previously visited cells
+            if (!state.visitedBeforeTortuga.isInTree(state.curLoc))
+                state.visitedBeforeTortuga = new VisitTree(state.curLoc, state.visitedBeforeTortuga);
+        } else {
+            if (!state.visitedAfterTortuga.isInTree(state.curLoc))
+                state.visitedAfterTortuga = new VisitTree(state.curLoc, state.visitedAfterTortuga);
+        }
+
+
+        if (perceptionType == 1 && state.curLoc.diagonalDistance(map.krakenLocation, 1, 1) == 1 || perceptionType == 2 && state.curLoc.manhattanDistance(map.krakenLocation, 1) <= 2) {
+            state.krakenDiscovered = true;
+        }
+        // Commenting this out as it is not used anywhere
+        /*if (perceptionType == 1 && state.curLoc.diagonalDistance(map.davyLocation, 1, 1) == 1 || perceptionType == 2 && state.curLoc.manhattanDistance(map.davyLocation, 1) <= 2) {
+            state.davyDiscovered = true;
+        }
+        if (perceptionType == 1 && state.curLoc.diagonalDistance(map.rockLocation, 1, 1) == 1 || perceptionType == 2 && state.curLoc.manhattanDistance(map.rockLocation, 1) <= 2) {
+            state.rockDiscovered = true;
+        }*/
+
+        if (state.tortugaVisited && state.curLoc.diagonalDistance(map.krakenLocation, 1, 1) == 1) {
+            state.krakenAlive = false;
+        }
+
+        List<Point> pointNeighbors = map.getNeighbors(state.curLoc, state.krakenAlive);
+        for (Point pointNeighbor : pointNeighbors) {
+            if ((!state.tortugaVisited && state.visitedBeforeTortuga.isInTree(pointNeighbor) || state.tortugaVisited && state.visitedAfterTortuga.isInTree(pointNeighbor))) {
+                continue;  // Already visited this point, don't go there again
+            }
+            if (shortestPath != null && pointNeighbor.diagonalDistance(map.chestLocation, 1, 1) >= shortestPath.path.size()) {
+                continue;  // The point to be explored is further away from the chest location than the length of the shortest path, therefore, we will not get the shortest path if we go there
+            }
+            state.nextPossibleStates.add(new GameState(state, pointNeighbor));
+        }
+        while (!state.nextPossibleStates.isEmpty()) {
+            GameState stateToExplore = state.nextPossibleStates.poll();
+            exploreFutureGameStates(stateToExplore);
+        }
+    }
+}
+
+/**
+ * Class for generating a statistical analysis report on the algorithms
+ */
+class StatisticalAnalysisReport {
+    /**
+     * A part of the statistical analysis report
+     */
+    class StatisticalAnalysisReportPart {
+        List<AlgorithmOutput> unsortedOutput = new ArrayList<>();
+        List<AlgorithmOutput> sortedOutput = new ArrayList<>();
+        AlgorithmOutput minimumExecutionTimeRun;
+        AlgorithmOutput maximumExecutionTimeRun;
+        List<Map> lossMaps = new ArrayList<>();
+        int n = 0;
+        int losses = 0;
+        int wins = 0;
+        double executionTimeMean;
+        double executionTimeMedian;
+        String executionTimeMode;
+        int executionTimeModeFrequency;
+        double executionTimeStandardDeviation;
+
+        /**
+         * Generates a report for the given algorithm outputs
+         * @param runs Algorithm outputs for different map runs
+         */
+        void generateReport(List<AlgorithmOutput> runs) {
+            unsortedOutput = new ArrayList<>(runs);
+            sortedOutput = unsortedOutput.stream().sorted(Comparator.comparingDouble(o -> o.millisecondRuntime)).toList();
+            minimumExecutionTimeRun = sortedOutput.get(0);
+            maximumExecutionTimeRun = sortedOutput.get(sortedOutput.size() - 1);
+
+            n = sortedOutput.size();
+            double sum = 0;
+            Hashtable<String, Integer> timeFrequencies = new Hashtable<>();
+            DecimalFormat df = new DecimalFormat("#.######");
+            df.setRoundingMode(RoundingMode.CEILING);
+
+            for (AlgorithmOutput output : unsortedOutput) {
+                sum += output.millisecondRuntime;
+                String curTime = df.format(output.millisecondRuntime);
+                timeFrequencies.put(curTime, timeFrequencies.getOrDefault(curTime, 0) + 1);
+                if (output.path == null) {
+                    losses += 1;
+                    lossMaps.add(output.map);
+                } else {
+                    wins += 1;
+                }
+            }
+
+            executionTimeMean = sum / sortedOutput.size();
+            if (sortedOutput.size() % 2 == 1) {
+                executionTimeMedian = sortedOutput.get((n + 1) / 2).millisecondRuntime;
+            } else {
+                executionTimeMedian = (sortedOutput.get(n / 2).millisecondRuntime + sortedOutput.get(n / 2 + 1).millisecondRuntime) / 2;
+            }
+
+            String maxKey = "-1";
+            int maxValue = -1;
+            for (String key : timeFrequencies.keySet()) {
+                int curValue = timeFrequencies.get(key);
+                if (curValue > maxValue) {
+                    maxValue = curValue;
+                    maxKey = key;
+                }
+            }
+            executionTimeMode = maxKey;
+            executionTimeModeFrequency = maxValue;
+
+            double squaredMeanDifferenceSum = 0;
+            for (AlgorithmOutput output : unsortedOutput) {
+                squaredMeanDifferenceSum += (output.millisecondRuntime - executionTimeMean) * (output.millisecondRuntime - executionTimeMean);
+            }
+            executionTimeStandardDeviation = Math.sqrt(squaredMeanDifferenceSum / (n - 1));
+        }
+    }
+    int n;
+    List<Map> maps = new ArrayList<>();
+    StatisticalAnalysisReportPart backtrackingVariantOneReport = new StatisticalAnalysisReportPart();
+    StatisticalAnalysisReportPart backtrackingVariantTwoReport = new StatisticalAnalysisReportPart();
+    StatisticalAnalysisReportPart AStarVariantOneReport = new StatisticalAnalysisReportPart();
+    StatisticalAnalysisReportPart AStarVariantTwoReport = new StatisticalAnalysisReportPart();
+
+    StatisticalAnalysisReport(int n) {
+        this.n = n;
+    }
+    StatisticalAnalysisReport() {
+        this(1000);
+    }
+
+    /**
+     * Generates a full report for the n given
+     */
+    void generateFullReport() {
+        List<AlgorithmOutput> backtrackingVariantOneRuns = new ArrayList<>();
+        List<AlgorithmOutput> backtrackingVariantTwoRuns = new ArrayList<>();
+        List<AlgorithmOutput> AStarVariantOneRuns = new ArrayList<>();
+        List<AlgorithmOutput> AStarVariantTwoRuns = new ArrayList<>();
+
+        for (int i = 0; i < n; i++) {
+            Map curMap = MapFactory.GenerateMap(null);
+            maps.add(curMap);
+            AStarAlgorithm astarAlgoV1 = new AStarAlgorithm(curMap, 1);
+            AStarAlgorithm astarAlgoV2 = new AStarAlgorithm(curMap, 2);
+            BacktrackingAlgorithm backtrackAlgoV1 = new BacktrackingAlgorithm(curMap, 1);
+            BacktrackingAlgorithm backtrackAlgoV2 = new BacktrackingAlgorithm(curMap, 2);
+            AlgorithmOutput outputAStarV1 = astarAlgoV1.getPath();
+            AlgorithmOutput outputAStarV2 = astarAlgoV2.getPath();
+            AlgorithmOutput outputBacktrackV1 = backtrackAlgoV1.getPath();
+            AlgorithmOutput outputBacktrackV2 = backtrackAlgoV2.getPath();
+            backtrackingVariantOneRuns.add(outputBacktrackV1);
+            backtrackingVariantTwoRuns.add(outputBacktrackV2);
+            AStarVariantOneRuns.add(outputAStarV1);
+            AStarVariantTwoRuns.add(outputAStarV2);
+            /*
+            AlgorithmResultFormatter formatter = new AlgorithmResultFormatter(curMap, outputAStarV1);
+            System.out.println(formatter.makeString());
+            System.out.println("------------------");
+             */
+        }
+
+        backtrackingVariantOneReport.generateReport(backtrackingVariantOneRuns);
+        backtrackingVariantTwoReport.generateReport(backtrackingVariantTwoRuns);
+        AStarVariantOneReport.generateReport(AStarVariantOneRuns);
+        AStarVariantTwoReport.generateReport(AStarVariantTwoRuns);
     }
 }
 
@@ -853,14 +1238,71 @@ class AlgorithmResultFormatter {
      */
     String makeString() {
         StringBuilder outStr = new StringBuilder();
-        outStr.append("Win\n");
-        outStr.append(algorithmOutput.path.path.size() - 1);
-        outStr.append('\n');
-        outStr.append(algorithmOutput.path);
-        outStr.append('\n');
-        outStr.append(map.getStringVisualization(true, algorithmOutput.path));
-        outStr.append('\n');
-        outStr.append(algorithmOutput.millisecondRuntime).append(" ms\n");
+        if (algorithmOutput.path != null) {
+            outStr.append("Win\n");
+            outStr.append(algorithmOutput.path.path.size() - 1);
+            outStr.append('\n');
+            outStr.append(algorithmOutput.path);
+            outStr.append('\n');
+            outStr.append(map.getStringVisualization(true, algorithmOutput.path));
+            outStr.append('\n');
+            outStr.append(algorithmOutput.millisecondRuntime).append(" ms\n");
+        } else {
+            outStr.append("Lose\n");
+        }
+        return outStr.toString();
+    }
+}
+
+/**
+ * Class to format the statistical analysis report
+ */
+class StatisticalAnalysisReportFormatter {
+    /**
+     * Class to format a part of the statistical analysis report
+     */
+    class StatisticalAnalysisReportPartFormatter {
+        StatisticalAnalysisReport.StatisticalAnalysisReportPart part;
+        public StatisticalAnalysisReportPartFormatter(StatisticalAnalysisReport.StatisticalAnalysisReportPart part) {
+            this.part = part;
+        }
+
+        /**
+         * Generates a statistics report string for this report part
+         * @return Report string
+         */
+        String makeString() {
+            StringBuilder outStr = new StringBuilder();
+            outStr.append("Execution time mean: ").append(part.executionTimeMean).append("ms\n");
+            outStr.append("Execution time mode: ").append(part.executionTimeMode).append("ms\n");
+            outStr.append("Execution time median: ").append(part.executionTimeMedian).append("ms\n");
+            outStr.append("Execution time standard deviation: ").append(part.executionTimeStandardDeviation).append("ms\n");
+            outStr.append("Wins: ").append(part.wins).append("\n");
+            outStr.append("Losses: ").append(part.losses).append("\n");
+            outStr.append("Percentage of wins: ").append((double)part.wins / (double)part.n * 100).append("%\n");
+            outStr.append("Percentage of losses: ").append((double)part.losses / (double)part.n * 100).append("%\n");
+            return outStr.toString();
+        }
+    }
+    StatisticalAnalysisReport report;
+    public StatisticalAnalysisReportFormatter(StatisticalAnalysisReport report) {
+        this.report = report;
+    }
+    /**
+     * Generates a statistics report string
+     * @return Report string
+     */
+    String makeString() {
+        StatisticalAnalysisReportPartFormatter AStarV1Formatter = new StatisticalAnalysisReportPartFormatter(report.AStarVariantOneReport);
+        StatisticalAnalysisReportPartFormatter AStarV2Formatter = new StatisticalAnalysisReportPartFormatter(report.AStarVariantTwoReport);
+        StatisticalAnalysisReportPartFormatter backtrackingV1Formatter = new StatisticalAnalysisReportPartFormatter(report.backtrackingVariantOneReport);
+        StatisticalAnalysisReportPartFormatter backtrackingV2Formatter = new StatisticalAnalysisReportPartFormatter(report.backtrackingVariantTwoReport);
+        StringBuilder outStr = new StringBuilder();
+        outStr.append("For ").append(report.n).append(" runs:\n");
+        outStr.append("A* Variant 1:\n").append(AStarV1Formatter.makeString()).append('\n');
+        outStr.append("A* Variant 2:\n").append(AStarV2Formatter.makeString()).append('\n');
+        outStr.append("Backtracking Variant 1:\n").append(backtrackingV1Formatter.makeString()).append('\n');
+        outStr.append("Backtracking Variant 2:\n").append(backtrackingV2Formatter.makeString()).append('\n');
         return outStr.toString();
     }
 }
@@ -872,14 +1314,14 @@ public class EvseyAntonovich {
     public static void main(String[] args) {
         int n;
         Map myMap;
-        System.out.println("Enter 1 for input.txt input, enter 2 for random map generation");
+        System.out.println("Enter 1 for input.txt input, enter 2 for random map generation, and enter 3 to generate a statistical report.");
         Scanner myScanner = new Scanner(System.in);
         n = myScanner.nextInt();
         int perceptionType = 1;
         MapInput myInput;
         List<Point> path = null;
         if (n == 1) {
-            FileLinesReader reader = new FileLinesReader("input1.txt");
+            FileLinesReader reader = new FileLinesReader("input5.txt");
             myInput = InputParser.parseLines(reader.getLines());
             if (myInput == null) {
                 System.out.println("Invalid input! Please enter valid input.");
@@ -887,8 +1329,32 @@ public class EvseyAntonovich {
             } else {
                 perceptionType = myInput.scenario;
             }
-        } else {
+        } else if (n == 2) {
             myInput = null;
+        } else {
+            int runs = 1000;
+            StatisticalAnalysisReport report = new StatisticalAnalysisReport(runs);
+            report.generateFullReport();
+            StatisticalAnalysisReportFormatter formatter = new StatisticalAnalysisReportFormatter(report);
+            String reportString = formatter.makeString();
+            try (PrintWriter reportWriter = new PrintWriter("statisticalAnalysisReport.txt")) {
+                reportWriter.print(reportString);
+            } catch (FileNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+            System.out.println(reportString);
+
+            StringBuilder lossMapStr = new StringBuilder();
+            for (Map lossMap : report.AStarVariantOneReport.lossMaps) {
+                lossMapStr.append(lossMap.getStringVisualization(true, null)).append("\n-----------------\n");
+            }
+
+            try (PrintWriter lossWriter = new PrintWriter("lossMaps.txt")) {
+                lossWriter.print(lossMapStr.toString());
+            } catch (FileNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+            return;
         }
         myMap = MapFactory.GenerateMap(myInput);
         if (myMap == null) {
@@ -896,13 +1362,31 @@ public class EvseyAntonovich {
             return;
         }
         AStarAlgorithm astarAlgo = new AStarAlgorithm(myMap, perceptionType);
-        AlgorithmOutput output = astarAlgo.getPath();
-        AlgorithmResultFormatter formatterAstar = new AlgorithmResultFormatter(myMap, output);
+        AlgorithmOutput outputA = astarAlgo.getPath();
+        AlgorithmResultFormatter formatterAstar = new AlgorithmResultFormatter(myMap, outputA);
         try (PrintWriter astarWriter = new PrintWriter("outputAStar.txt")) {
             astarWriter.print(formatterAstar.makeString());
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
         System.out.println(formatterAstar.makeString());
+        System.out.println();
+
+        BacktrackingAlgorithm backtrackAlgo = new BacktrackingAlgorithm(myMap, perceptionType);
+        AlgorithmOutput outputB;
+        if (outputA.path != null) {
+            outputB = backtrackAlgo.getPath();
+        } else {  // No point in running backtracking if we know there is no solution
+            outputB = new AlgorithmOutput();
+            outputB.millisecondRuntime = 1;
+            outputB.path = null;
+        }
+        AlgorithmResultFormatter formatterBacktracking = new AlgorithmResultFormatter(myMap, outputB);
+        try (PrintWriter backtrackingWriter = new PrintWriter("outputBacktracking.txt")) {
+            backtrackingWriter.print(formatterBacktracking.makeString());
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println(formatterBacktracking.makeString());
     }
 }
