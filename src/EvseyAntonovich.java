@@ -335,10 +335,10 @@ class Map {
                 int diffX = nextPoint.x - prevPoint.x;
                 int diffY = nextPoint.y - prevPoint.y;
                 if (diffX > 0 && diffY > 0 || diffX < 0 && diffY < 0) {
-                    lines.get(curPoint.y).set(curPoint.x, '⟍');
+                    lines.get(curPoint.y).set(curPoint.x, '\\');
                 }
                 if (diffX > 0 && diffY < 0 || diffX < 0 && diffY > 0) {
-                    lines.get(curPoint.y).set(curPoint.x, '⟋');
+                    lines.get(curPoint.y).set(curPoint.x, '/');
                 }
                 if (diffX == 0 && diffY != 0) {
                     lines.get(curPoint.y).set(curPoint.x, '|');
@@ -1226,7 +1226,7 @@ class AlgorithmResultFormatter {
     }
 
     /**
-     * Makes a string that is valid output for the algorithm, including Win/Lose, shortest distance, the shortest path itself, and path visualized on the map
+     * Makes a string that is valid output for the algorithm, including Win/Lose, the shortest distance, the shortest path itself, and path visualized on the map
      * @return The string
      */
     String makeString() {
@@ -1237,8 +1237,12 @@ class AlgorithmResultFormatter {
             outStr.append('\n');
             outStr.append(algorithmOutput.path);
             outStr.append('\n');
+            outStr.append("-------------------\n");
+            outStr.append("Map legend:\n");
+            outStr.append("@ - Actor, # - Dead Man's Chest, $ - Tortuga Island, D - Davy Jones, K - Kraken, R - Rock, ! - Danger Zone, / | \\ —  - Path\n");
             outStr.append(map.getStringVisualization(true, algorithmOutput.path));
             outStr.append('\n');
+            outStr.append("-------------------\n");
             outStr.append(algorithmOutput.millisecondRuntime).append(" ms\n");
         } else {
             outStr.append("Lose\n");
