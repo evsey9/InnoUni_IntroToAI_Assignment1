@@ -6,18 +6,6 @@ import java.text.DecimalFormat;
 import java.util.*;
 
 /**
- * Basic class for a pair of values
- */
-class Pair<T, V> {
-    public T first;
-    public V second;
-    Pair(T first, V second) {
-        this.first = first;
-        this.second = second;
-    }
-}
-
-/**
  * Class for a coordinate in 2D space
  */
 class Point {
@@ -366,7 +354,13 @@ class Map {
         }
 
         StringBuilder outStrBuilder = new StringBuilder();
+        outStrBuilder.append("  ");
         for (int i = 0; i < mapSize; i++) {
+            outStrBuilder.append(i).append(" ");
+        }
+        outStrBuilder.append("\n");
+        for (int i = 0; i < mapSize; i++) {
+            outStrBuilder.append(i).append(" ");
             for (int j = 0; j < mapSize; j++) {
                 outStrBuilder.append(lines.get(i).get(j));
                 outStrBuilder.append(' ');
@@ -971,7 +965,6 @@ class BacktrackingAlgorithm extends Algorithm {
             iteration = previousState.iteration + 1;
         }
     }
-    Set<Point> visitedTotal = new HashSet<>();
     PathResult shortestPath = null;
     List<List<Integer>> shortestIterationBeforeTortuga = new ArrayList<>();
     List<List<Integer>> shortestIterationAfterTortuga = new ArrayList<>();
@@ -1321,7 +1314,7 @@ public class EvseyAntonovich {
         MapInput myInput;
         List<Point> path = null;
         if (n == 1) {
-            FileLinesReader reader = new FileLinesReader("input5.txt");
+            FileLinesReader reader = new FileLinesReader("input.txt");
             myInput = InputParser.parseLines(reader.getLines());
             if (myInput == null) {
                 System.out.println("Invalid input! Please enter valid input.");
