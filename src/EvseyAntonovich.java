@@ -1366,6 +1366,7 @@ public class EvseyAntonovich {
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
+        System.out.println("A*:");
         System.out.println(formatterAstar.makeString());
         System.out.println();
 
@@ -1384,6 +1385,7 @@ public class EvseyAntonovich {
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
+        System.out.println("Backtracking:");
         System.out.println(formatterBacktracking.makeString());
     }
 }
